@@ -1,0 +1,293 @@
+<?php
+
+use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\AdminAuthController;
+use App\Http\Controllers\AdminController;
+use App\Http\Controllers\AdminTierController;
+use App\Http\Controllers\AdminNakesController;
+use App\Http\Controllers\SuperAdminNakesController;
+use App\Http\Controllers\AdminOperasionalNakesController;
+use App\Http\Controllers\LayananController;
+use App\Http\Controllers\PromoController;
+use App\Http\Controllers\ArtikelController;
+use App\Http\Controllers\BookingController;
+use App\Http\Controllers\SuperAdminMasterData\SuperAdminPasien;
+use App\Http\Controllers\SuperAdminMasterData\SuperAdminDataBarang;
+use App\Http\Controllers\SuperAdminMasterData\SuperAdminMasterTarif;
+use App\Http\Controllers\WilayahLayananController;
+use App\Http\Controllers\KotaKabupatenController;
+use App\Http\Controllers\KategoriLayananController;
+use App\Http\Controllers\KategoriArtikelController;
+use App\Http\Controllers\TagController;
+use App\Http\Controllers\KategoriPembayaranController;
+use App\Http\Controllers\MetodePembayaranController;
+use App\Http\Controllers\TarifTransportController;
+use App\Http\Controllers\KomponenTarifController;
+use App\Http\Controllers\BhpController;
+use App\Http\Controllers\MappingLayananBhpController;
+use App\Http\Controllers\KecamatanController;
+use App\Http\Controllers\KelurahanController;
+use App\Http\Controllers\MasterAgamaController;
+use App\Http\Controllers\MasterPendidikanController;
+use App\Http\Controllers\MasterUniversitasController;
+use App\Http\Controllers\AdminSeederController;
+use App\Http\Controllers\NotificationTemplateController;
+use App\Http\Controllers\MasterKategoriTarifController;
+use App\Http\Controllers\WebSocketController;
+
+use App\Http\Controllers\KonfigurasiEnvController;
+use App\Http\Controllers\UlasanController;
+use App\Http\Controllers\HubungiKamiController;
+use App\Http\Controllers\ActivityLogController;
+use App\Http\Controllers\LaporanController;
+use App\Http\Controllers\DashboardStatistikController;
+
+Route::middleware(['auth:sanctum'])->group(function () {
+
+    // Auth Admin & Super Admin
+    Route::post('/admin/logout', [AdminAuthController::class, 'logout']);
+    Route::get('/admin/me', [AdminController::class, 'me']);
+
+    // Management Layanan
+    Route::post('/layanan', [LayananController::class, 'store']);
+    Route::put('/layanan/{layanan}', [LayananController::class, 'update']);
+    Route::delete('/layanan/{layanan}', [LayananController::class, 'destroy']);
+
+    // Management Promo
+    Route::post('/promo', [PromoController::class, 'store']);
+    Route::put('/promo/{promo}', [PromoController::class, 'update']);
+    Route::delete('/promo/{promo}', [PromoController::class, 'destroy']);
+
+    // Management Artikel
+    Route::post('/artikel', [ArtikelController::class, 'store']);
+    Route::post('/artikel/upload-images', [ArtikelController::class, 'uploadImages']);
+    Route::put('/artikel/{artikel}', [ArtikelController::class, 'update']);
+    Route::delete('/artikel/{artikel}', [ArtikelController::class, 'destroy']);
+
+    // Management Tag Artikel
+    Route::post('/tags', [TagController::class, 'store']);
+    Route::put('/tags/{id}', [TagController::class, 'update']);
+    Route::delete('/tags/{id}', [TagController::class, 'destroy']);
+
+    // Kategori Layanan CRUD
+    Route::post('/layanan/kategori', [KategoriLayananController::class, 'store']);
+    Route::get('/layanan/kategori/{id}', [KategoriLayananController::class, 'show']);
+    Route::put('/layanan/kategori/{id}', [KategoriLayananController::class, 'update']);
+    Route::delete('/layanan/kategori/{id}', [KategoriLayananController::class, 'destroy']);
+
+    // Kategori Pembayaran CRUD
+    Route::post('/pembayaran/kategori', [KategoriPembayaranController::class, 'store']);
+    Route::get('/pembayaran/kategori/{id}', [KategoriPembayaranController::class, 'show']);
+    Route::put('/pembayaran/kategori/{id}', [KategoriPembayaranController::class, 'update']);
+    Route::delete('/pembayaran/kategori/{id}', [KategoriPembayaranController::class, 'destroy']);
+
+    // Metode Pembayaran CRUD
+    Route::post('/pembayaran/metode', [MetodePembayaranController::class, 'store']);
+    Route::get('/pembayaran/metode/{id}', [MetodePembayaranController::class, 'show']);
+    Route::post('/pembayaran/metode/{id}', [MetodePembayaranController::class, 'update']);
+    Route::delete('/pembayaran/metode/{id}', [MetodePembayaranController::class, 'destroy']);
+
+    //Super Admin
+    // Management Nakes - Admin
+    Route::prefix('admin/nakes')->group(function () {
+        Route::get('/requests', [AdminNakesController::class, 'index']);
+        Route::get('/requests/{id}', [AdminNakesController::class, 'show']);
+        
+
+        // Step Verification Routes
+        Route::post('/requests/{id}/pelatihan', [AdminNakesController::class, 'setPelatihan']); // Fixed: setPelatihan
+        Route::post('/requests/{id}/approve', [AdminNakesController::class, 'approve']);
+        Route::post('/requests/{id}/reject', [AdminNakesController::class, 'reject']);
+
+        Route::get('/', [AdminNakesController::class, 'listActiveNakes']);
+        Route::post('/pendaftaran', [AdminNakesController::class, 'CreateNakesViaAdmin']);
+    });
+
+
+    // Management Nakes - Super Admin
+    Route::prefix('admin/management/nakes')->group(function () {
+        Route::get('/', [SuperAdminNakesController::class, 'index']);
+        Route::get('/{id}', [SuperAdminNakesController::class, 'show']);
+        Route::put('/{id}', [SuperAdminNakesController::class, 'update']);
+        Route::delete('/{id}', [SuperAdminNakesController::class, 'destroy']);
+    });
+
+    // Approval perubahan operasional Nakes
+    Route::prefix('admin/operasional-nakes')->group(function () {
+        Route::get('/', [AdminOperasionalNakesController::class, 'index']);
+        Route::get('/{id}', [AdminOperasionalNakesController::class, 'show']);
+        Route::post('/{id}/approve', [AdminOperasionalNakesController::class, 'approve']);
+        Route::post('/{id}/reject', [AdminOperasionalNakesController::class, 'reject']);
+    });
+
+    // Admin Account & Tier Management
+    Route::get('/manage-admin/tiers', [AdminTierController::class, 'index']);
+    Route::post('/manage-admin/tiers', [AdminTierController::class, 'store']);
+    Route::get('/manage-admin/tiers/{id}', [AdminTierController::class, 'show']);
+    Route::put('/manage-admin/tiers/{id}', [AdminTierController::class, 'update']);
+    Route::delete('/manage-admin/tiers/{id}', [AdminTierController::class, 'destroy']);
+
+    Route::get('/manage-admin', [AdminController::class, 'index']);
+    Route::post('/manage-admin', [AdminController::class, 'store']);
+
+    Route::get('/manage-admin/chat-rooms', [WebSocketController::class, 'adminRooms']);
+    Route::get('/admin/chat-rooms', [WebSocketController::class, 'adminRooms']);
+    Route::get('/manage-admin/chat-rooms/{id}', [WebSocketController::class, 'adminRoomDetail']);
+    Route::get('/admin/chat-rooms/{id}', [WebSocketController::class, 'adminRoomDetail']);
+
+    Route::get('/manage-admin/{id}', [AdminController::class, 'show']);
+    Route::put('/manage-admin/{id}', [AdminController::class, 'update']);
+    
+    Route::delete('/manage-admin/{id}', [AdminController::class, 'destroy']);
+    
+    Route::get('/manage-admin/bookings', [BookingController::class, 'adminIndex']);
+    Route::get('/admin/bookings', [BookingController::class, 'adminIndex']);
+
+    // Seeder Management
+    Route::get('/admin/seeders', [AdminSeederController::class, 'index']);
+    Route::post('/admin/seeders/run', [AdminSeederController::class, 'run']);
+    Route::post('/admin/seeders/wilayah/run', [AdminSeederController::class, 'startWilayahImport']);
+    Route::get('/admin/seeders/wilayah/runs/latest', [AdminSeederController::class, 'latestWilayahImportStatus']);
+    Route::get('/admin/seeders/wilayah/runs/{runId}', [AdminSeederController::class, 'wilayahImportStatus'])
+        ->whereUuid('runId');
+    Route::post('/admin/seeders/wilayah/runs/{runId}/cancel', [AdminSeederController::class, 'cancelWilayahImport'])
+        ->whereUuid('runId');
+    Route::get('/admin/seeders/wilayah-source', [AdminSeederController::class, 'wilayahSource']);
+    Route::put('/admin/seeders/wilayah-source/api', [AdminSeederController::class, 'saveWilayahApi']);
+    Route::post('/admin/seeders/wilayah-source/file', [AdminSeederController::class, 'saveWilayahFile']);
+
+    //Profile admin
+    Route::prefix('admin/profile')->group(function () {
+        Route::put('admin/profile/ubah-password', [AdminController::class, 'changePassword']);
+        Route::post('/', [AdminController::class, 'updateProfile']);
+    });
+    
+
+    // Management Pasien
+    Route::prefix('admin/pasien')->group(function () {
+        Route::get('/', [SuperAdminPasien::class, 'index']);
+        Route::get('/{id_pasien}', [SuperAdminPasien::class, 'show']);
+        Route::put('/{id_pasien}', [SuperAdminPasien::class, 'update']);
+        Route::patch('/{id}/toggle-status', [SuperAdminPasien::class, 'toggleStatus']);
+        Route::delete('/{id_pasien}', [SuperAdminPasien::class, 'destroy']);
+    });
+
+    // Master Data (BHP & Tarif)
+    Route::apiResource('/master-kategori-tarif', MasterKategoriTarifController::class);
+    Route::put('/bhp-items/global-margin', [SuperAdminDataBarang::class, 'updateGlobalMargin']);
+    Route::apiResource('/bhp-items', SuperAdminDataBarang::class);
+    Route::apiResource('/master-tarif', SuperAdminMasterTarif::class);
+
+    // Tarif Transport CRUD
+    Route::apiResource('/tarif-transport', TarifTransportController::class);
+
+    // Komponen Tarif / Biaya CRUD
+    Route::apiResource('/komponen-biaya', KomponenTarifController::class);
+    Route::get('/komponen-tarif/kategori', [KomponenTarifController::class, 'KategoriKomponenTarif']);
+
+    // BHP Item CRUD
+    Route::apiResource('/bhp', BhpController::class);
+
+    // Mapping Layanan BHP
+    Route::get('/mapping-layanan-bhp', [MappingLayananBhpController::class, 'index']);
+    Route::get('/mapping-layanan-bhp/{id_layanan}', [MappingLayananBhpController::class, 'show']);
+    Route::post('/mapping-layanan-bhp/{id_layanan}/sync', [MappingLayananBhpController::class, 'sync']);
+
+    // Master Wilayah - Provinsi (Mutating endpoints require auth, GET endpoints are in public.php)
+    Route::prefix('wilayah-layanan')->group(function () {
+        Route::post('/', [WilayahLayananController::class, 'store']);
+        Route::put('/{wilayahLayanan}', [WilayahLayananController::class, 'update']);
+        Route::delete('/{wilayahLayanan}', [WilayahLayananController::class, 'destroy']);
+        Route::patch('/{wilayahLayanan}/toggle-status', [WilayahLayananController::class, 'toggleStatus']);
+    });
+
+    // Master Wilayah - Kota / Kabupaten (Mutating endpoints require auth, GET endpoints are in public.php)
+    Route::prefix('kota-kabupaten')->group(function () {
+        Route::post('/', [KotaKabupatenController::class, 'store']);
+        Route::put('/{id}', [KotaKabupatenController::class, 'update']);
+        Route::delete('/{id}', [KotaKabupatenController::class, 'destroy']);
+    });
+
+    // Master Wilayah - Kecamatan
+    Route::apiResource('/kecamatan', KecamatanController::class);
+
+    // Master Wilayah - Kelurahan
+    Route::apiResource('/kelurahan', KelurahanController::class);
+
+    // Template Notifikasi CRUD
+    Route::apiResource('/notification-templates', NotificationTemplateController::class);
+
+    // Master Bank - Admin CRUD (GET /banks/admin for admin view, public GET /banks is in public.php)
+    Route::prefix('banks')->group(function () {
+        Route::get('/admin', [\App\Http\Controllers\MasterBankController::class, 'adminIndex']);
+        Route::post('/', [\App\Http\Controllers\MasterBankController::class, 'store']);
+        Route::put('/{id}', [\App\Http\Controllers\MasterBankController::class, 'update']);
+        Route::patch('/{id}/toggle-status', [\App\Http\Controllers\MasterBankController::class, 'toggleStatus']);
+        Route::delete('/{id}', [\App\Http\Controllers\MasterBankController::class, 'destroy']);
+    });
+
+    // Global Config - Admin Update & Delete
+    Route::post('/global-config', [\App\Http\Controllers\GlobalConfigController::class, 'updateGlobalConfig']);
+    Route::delete('/global-config', [\App\Http\Controllers\GlobalConfigController::class, 'destroy']);
+
+    // SEO Config - Admin Update
+    Route::post('/seo-config', [\App\Http\Controllers\SeoConfigController::class, 'updateSeoConfig']);
+
+    // Web Setting - Admin Update
+    Route::post('/web-setting', [\App\Http\Controllers\WebSettingController::class, 'updateWebSetting']);
+
+    // Legality Admin CRUD
+    Route::apiResource('/legalitas', \App\Http\Controllers\LegalityController::class);
+
+    // Master Agama dan Pendidikan - Admin CRUD
+    Route::apiResource('/master-agama', MasterAgamaController::class)
+        ->parameters(['master-agama' => 'agama']);
+    Route::apiResource('/master-pendidikan', MasterPendidikanController::class)
+        ->parameters(['master-pendidikan' => 'pendidikan']);
+    Route::apiResource('/master-universitas', MasterUniversitasController::class)
+        ->parameters(['master-universitas' => 'universita']);
+
+    // Konfigurasi .env
+    Route::get('/konfigurasi-env', [KonfigurasiEnvController::class, 'index']);
+    Route::post('/konfigurasi-env', [KonfigurasiEnvController::class, 'update']);
+
+    // Management CMS Ulasan - Admin
+    Route::prefix('admin/ulasan')->group(function () {
+        Route::get('/', [UlasanController::class, 'indexAdmin']);
+        Route::post('/', [UlasanController::class, 'storeAdmin']);
+        Route::get('/{id}', [UlasanController::class, 'show']);
+        Route::post('/{id}', [UlasanController::class, 'updateAdmin']);
+        Route::patch('/{id}/toggle-publish', [UlasanController::class, 'togglePublish']);
+        Route::delete('/{id}', [UlasanController::class, 'destroy']);
+    });
+
+    // Management CMS Hubungi Kami - Admin
+    Route::prefix('admin/hubungi-kami')->group(function () {
+        Route::get('/settings', [HubungiKamiController::class, 'getSettingsAdmin']);
+        Route::post('/settings', [HubungiKamiController::class, 'updateSettingsAdmin']);
+        Route::get('/pesan', [HubungiKamiController::class, 'indexPesan']);
+        Route::get('/pesan/{id}', [HubungiKamiController::class, 'showPesan']);
+        Route::put('/pesan/{id}', [HubungiKamiController::class, 'updatePesanStatus']);
+        Route::delete('/pesan/{id}', [HubungiKamiController::class, 'destroyPesan']);
+    });
+
+    // Aktivitas Log - Admin
+    Route::prefix('admin/activity-logs')->group(function () {
+        Route::get('/', [ActivityLogController::class, 'index']);
+        Route::post('/', [ActivityLogController::class, 'store']);
+        Route::get('/{id}', [ActivityLogController::class, 'show']);
+        Route::delete('/{id}', [ActivityLogController::class, 'destroy']);
+        Route::post('/clear', [ActivityLogController::class, 'clear']);
+    });
+
+    // Laporan Rekapitulasi - Admin
+    Route::prefix('admin/laporan')->group(function () {
+        Route::get('/transaksi', [LaporanController::class, 'laporanTransaksi']);
+        Route::get('/booking', [LaporanController::class, 'laporanBooking']);
+        Route::get('/nakes', [LaporanController::class, 'laporanNakes']);
+    });
+
+    // Dashboard Statistik Agregat - Admin
+    Route::get('/admin/dashboard-stats', [DashboardStatistikController::class, 'index']);
+
+});

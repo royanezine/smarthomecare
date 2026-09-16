@@ -1,0 +1,276 @@
+<?php
+
+namespace App\Http\Controllers\SuperAdminMasterData;
+
+use App\Http\Controllers\Controller;
+use App\Models\MasterTarif;
+use App\Models\MasterLayanan;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+
+/**
+ * Master Tarif System
+ * 
+ * @group Master Data
+ * @subgroup Master Tarif
+ */
+class SuperAdminMasterTarif extends Controller
+{
+    private function hasTransportConflict(array $layananIds, ?int $ignoreId = null): bool
+    {
+        foreach ($layananIds as $layananId) {
+            $query = MasterTarif::query()
+                ->where('is_transport', true)
+                ->where(function ($builder) use ($layananId) {
+                    $builder->where('id_layanan', $layananId)
+                        ->orWhereHas('layananTermasuk', fn ($pivot) => $pivot->where('master_layanan.id_layanan', $layananId));
+                });
+
+            if ($ignoreId !== null) {
+                $query->where('id_master_tarif', '!=', $ignoreId);
+            }
+
+            if ($query->exists()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Tampilkan semua daftar Master Tarif
+     */
+    public function index()
+    {
+        $masterTarifs = MasterTarif::with(['layanan', 'kategoriTarif', 'layananTermasuk', 'komponenTarif'])->get();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Berhasil mengambil data Master Tarif',
+            'data' => $masterTarifs
+        ], 200);
+    }
+
+    /**
+     * Simpan Master Tarif baru
+     * 
+     */
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'nama_template' => ['required', 'string', 'max:255'],
+            'id_kategori_tarif' => ['required', 'exists:master_kategori_tarif,id_kategori_tarif'],
+            'id_layanan' => ['nullable', 'required_without:layanan_ids', 'exists:master_layanan,id_layanan'],
+            'id_kategori_layanan' => ['nullable', 'exists:kategori_layanans,id_kategori_layanan'],
+            'kategori_layanan_ids' => ['sometimes', 'array'],
+            'kategori_layanan_ids.*' => ['integer', 'exists:kategori_layanans,id_kategori_layanan'],
+            'layanan_ids' => ['sometimes', 'array'],
+            'layanan_ids.*' => ['integer', 'exists:master_layanan,id_layanan'],
+            'komponen_tarif_ids' => ['sometimes', 'array'],
+            'komponen_tarif_ids.*' => ['integer', 'exists:master_komponen_biaya,id_komponen'],
+            'fee_nakes_tipe' => ['sometimes', 'in:nominal,persen'],
+            'fee_nakes_nilai' => ['required', 'numeric', 'min:0'],
+            'is_transport' => ['boolean'],
+            'is_active' => ['boolean'],
+        ]);
+
+        $feeType = $request->input('fee_nakes_tipe', 'persen');
+        $feeValue = (float) $request->input('fee_nakes_nilai', 0);
+        if ($feeType === 'persen' && $feeValue > 100) {
+            return response()->json(['message' => 'Fee nakes dalam persen tidak boleh lebih dari 100'], 422);
+        }
+
+        // Ambil harga dasar dari layanan untuk kalkulasi fee nominal jika tipe persen
+        $layananUtama = MasterLayanan::find($request->id_layanan);
+        $hargaLayanan = $layananUtama ? (float) $layananUtama->harga : 0;
+
+        $nominalFeeNakes = $feeType === 'nominal'
+            ? $feeValue
+            : ($hargaLayanan * ($feeValue / 100));
+        $nominalFeePlatform = max(0, $hargaLayanan - $nominalFeeNakes);
+
+        DB::beginTransaction();
+        try {
+            $createdTarifs = [];
+
+            $layananIds = array_unique(array_filter(array_merge(
+                $request->filled('id_layanan') ? [(int) $request->id_layanan] : [],
+                array_map('intval', $request->input('layanan_ids', [])),
+                $request->filled('id_kategori_layanan')
+                    ? MasterLayanan::where('id_kategori_layanan', $request->id_kategori_layanan)->pluck('id_layanan')->all()
+                    : [],
+                !empty($request->input('kategori_layanan_ids', []))
+                    ? MasterLayanan::whereIn('id_kategori_layanan', $request->input('kategori_layanan_ids', []))->pluck('id_layanan')->all()
+                    : []
+            )));
+            if (empty($layananIds)) {
+                throw new \InvalidArgumentException('Minimal satu layanan harus dipilih');
+            }
+            if ($request->boolean('is_transport') && $this->hasTransportConflict($layananIds)) {
+                throw new \InvalidArgumentException('Setiap layanan hanya boleh memiliki satu Master Tarif transport.');
+            }
+            $komponenIds = $request->input('komponen_tarif_ids', []);
+
+            $masterTarif = MasterTarif::updateOrCreate(
+                [
+                    'nama_template' => $request->nama_template,
+                    'id_kategori_tarif' => $request->id_kategori_tarif,
+                    'id_layanan' => $layananIds[0],
+                ],
+                [
+                    'fee_nakes_tipe' => $feeType,
+                    'fee_nakes_nilai' => $feeValue,
+                    'fee_nakes_nominal' => $nominalFeeNakes,
+                    'fee_platform_nominal' => $nominalFeePlatform,
+                    'is_transport' => $request->is_transport ?? false,
+                    'is_active' => $request->is_active ?? true,
+                ]
+            );
+
+            $masterTarif->layananTermasuk()->sync($layananIds);
+            if ($request->has('komponen_tarif_ids')) {
+                $masterTarif->komponenTarif()->sync($komponenIds);
+            }
+
+            $masterTarif->load(['layanan', 'kategoriTarif', 'layananTermasuk', 'komponenTarif']);
+            $createdTarifs[] = $masterTarif;
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Master Tarif berhasil disimpan',
+                'data' => count($createdTarifs) === 1 ? $createdTarifs[0] : $createdTarifs
+            ], 201);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal menyimpan master tarif: ' . $e->getMessage()
+            ], $e instanceof \InvalidArgumentException ? 422 : 500);
+        }
+    }
+
+    /**
+     * Tampilkan detail Master Tarif berdasarkan ID
+     */
+    public function show($id)
+    {
+        $masterTarif = MasterTarif::with(['layanan', 'kategoriTarif', 'layananTermasuk', 'komponenTarif'])->findOrFail($id);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Detail Master Tarif',
+            'data' => $masterTarif
+        ], 200);
+    }
+
+    /**
+     * Update Master Tarif
+     */
+    public function update(Request $request, $id)
+    {
+        $masterTarif = MasterTarif::findOrFail($id);
+
+        $validated = $request->validate([
+            'nama_template' => ['sometimes', 'required', 'string', 'max:255'],
+            'id_kategori_tarif' => ['sometimes', 'required', 'exists:master_kategori_tarif,id_kategori_tarif'],
+            'id_layanan' => ['nullable', 'required_without:layanan_ids', 'exists:master_layanan,id_layanan'],
+            'id_kategori_layanan' => ['nullable', 'exists:kategori_layanans,id_kategori_layanan'],
+            'kategori_layanan_ids' => ['sometimes', 'array'],
+            'kategori_layanan_ids.*' => ['integer', 'exists:kategori_layanans,id_kategori_layanan'],
+            'layanan_ids' => ['sometimes', 'array'],
+            'layanan_ids.*' => ['integer', 'exists:master_layanan,id_layanan'],
+            'komponen_tarif_ids' => ['sometimes', 'array'],
+            'komponen_tarif_ids.*' => ['integer', 'exists:master_komponen_biaya,id_komponen'],
+            'fee_nakes_tipe' => ['sometimes', 'in:nominal,persen'],
+            'fee_nakes_nilai' => ['sometimes', 'numeric', 'min:0'],
+            'is_transport' => ['boolean'],
+            'is_active' => ['boolean'],
+        ]);
+
+        DB::beginTransaction();
+        try {
+            if ($request->has('nama_template')) $masterTarif->nama_template = $request->nama_template;
+            if ($request->has('id_kategori_tarif')) $masterTarif->id_kategori_tarif = $request->id_kategori_tarif;
+            $layananIds = array_unique(array_filter(array_merge(
+                $request->filled('id_layanan') ? [(int) $request->id_layanan] : [],
+                array_map('intval', $request->input('layanan_ids', [])),
+                $request->filled('id_kategori_layanan')
+                    ? MasterLayanan::where('id_kategori_layanan', $request->id_kategori_layanan)->pluck('id_layanan')->all()
+                    : [],
+                !empty($request->input('kategori_layanan_ids', []))
+                    ? MasterLayanan::whereIn('id_kategori_layanan', $request->input('kategori_layanan_ids', []))->pluck('id_layanan')->all()
+                    : []
+            )));
+            if (empty($layananIds)) {
+                $layananIds = [(int) $masterTarif->id_layanan];
+            }
+            $isTransport = $request->has('is_transport')
+                ? $request->boolean('is_transport')
+                : (bool) $masterTarif->is_transport;
+            if ($isTransport && $this->hasTransportConflict($layananIds, (int) $masterTarif->getKey())) {
+                throw new \InvalidArgumentException('Setiap layanan hanya boleh memiliki satu Master Tarif transport.');
+            }
+            if ($request->has('id_layanan')) $masterTarif->id_layanan = $layananIds[0];
+            if ($request->has('fee_nakes_tipe')) $masterTarif->fee_nakes_tipe = $request->fee_nakes_tipe;
+            if ($request->has('fee_nakes_nilai')) $masterTarif->fee_nakes_nilai = $request->fee_nakes_nilai;
+            if ($request->has('is_transport')) $masterTarif->is_transport = $request->boolean('is_transport');
+            if ($request->has('is_active')) $masterTarif->is_active = $request->is_active;
+
+            $layananUtama = MasterLayanan::find($masterTarif->id_layanan);
+            $hargaLayanan = $layananUtama ? (float) $layananUtama->harga : 0;
+            $feeType = $masterTarif->fee_nakes_tipe ?: 'persen';
+            $feeValue = (float) $masterTarif->fee_nakes_nilai;
+
+            if ($feeType === 'persen' && $feeValue > 100) {
+                throw new \InvalidArgumentException('Fee nakes dalam persen tidak boleh lebih dari 100');
+            }
+
+            $masterTarif->fee_nakes_nominal = $feeType === 'nominal' ? $feeValue : ($hargaLayanan * ($feeValue / 100));
+            $masterTarif->fee_platform_nominal = max(0, $hargaLayanan - $masterTarif->fee_nakes_nominal);
+
+            $masterTarif->save();
+
+            if ($request->has('layanan_ids') || $request->has('id_layanan') || $request->has('id_kategori_layanan')) {
+                $masterTarif->layananTermasuk()->sync($layananIds);
+            }
+            if ($request->has('komponen_tarif_ids')) {
+                $masterTarif->komponenTarif()->sync($request->input('komponen_tarif_ids', []));
+            }
+
+            DB::commit();
+
+            $masterTarif->load(['layanan', 'kategoriTarif', 'layananTermasuk', 'komponenTarif']);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Master Tarif berhasil diupdate',
+                'data' => $masterTarif
+            ], 200);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mengupdate master tarif: ' . $e->getMessage()
+            ], $e instanceof \InvalidArgumentException ? 422 : 500);
+        }
+    }
+
+    /**
+     * Hapus Master Tarif
+     */
+    public function destroy($id)
+    {
+        $masterTarif = MasterTarif::findOrFail($id);
+        $masterTarif->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Master tarif berhasil dihapus'
+        ], 200);
+    }
+}

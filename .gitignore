@@ -1,0 +1,19 @@
+# ============================================================
+# SmartHomeCare - Git ignore (root)
+# ============================================================
+
+# Env files (jangan commit secret)
+/.env
+/.env.*
+
+# File sementara
+/stop
+
+# Logs
+*.log
+
+# Dependensi (fallback, sub-folder sudah punya .gitignore sendiri)
+node_modules/
+vendor/
+dist/
+.next/

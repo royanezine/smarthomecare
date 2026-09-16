@@ -1,0 +1,67 @@
+version: "3.9"
+
+# ============================================================
+# SmartHomeCare - Infrastruktur (opsional via Docker)
+# `docker compose up -d` untuk menjalankan:
+#   - MySQL 8     (database utama Laravel)
+#   - WebSocket   (Go service untuk chat & live tracking)
+#   - Redis       (cache/queue opsional)
+#
+# Laravel (PHP-FPM) & Apache tetap dipasang langsung di host
+# sesuai docs/DEPLOYMENT.md, atau jalankan dengan Nginx + PHP-FPM
+# terpisah. Docker ini hanya menangani service pendukung.
+# ============================================================
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: smarthomecare-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: smartHomeCare
+      MYSQL_USER: smartcare
+      MYSQL_PASSWORD: ${DB_PASSWORD:-GANTI_DENGAN_PASSWORD_TERAMAN}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-GANTI_DENGAN_ROOT_PASSWORD}
+      TZ: Asia/Jakarta
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    ports:
+      - "127.0.0.1:3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD:-GANTI_DENGAN_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  websocket:
+    build:
+      context: ./backend/websocket-service
+      dockerfile: Dockerfile
+    container_name: smarthomecare-websocket
+    restart: unless-stopped
+    environment:
+      PORT: 8088
+    ports:
+      - "127.0.0.1:8088:8088"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8088/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: smarthomecare-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+
+volumes:
+  mysql_data:
+  redis_data:

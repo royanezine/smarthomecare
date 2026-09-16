@@ -1,0 +1,19 @@
+[Unit]
+Description=SmartHomeCare Portal (Next.js)
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/smarthomecare/portal
+Environment=NODE_ENV=production
+Environment=PORT=3011
+ExecStart=/usr/bin/npm run start -- -p 3011
+Restart=always
+RestartSec=10
+# Batas memori aman untuk Next.js
+MemoryMax=1024M
+
+[Install]
+WantedBy=multi-user.target

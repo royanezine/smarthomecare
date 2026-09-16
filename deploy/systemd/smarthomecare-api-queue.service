@@ -1,0 +1,18 @@
+[Unit]
+Description=SmartHomeCare Laravel Queue Worker
+After=network.target
+After=mysql.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/smarthomecare/api
+ExecStart=/usr/bin/php /var/www/smarthomecare/api/artisan queue:work --sleep=3 --tries=3 --max-time=3600
+Restart=always
+RestartSec=10
+# Pastikan proses lama berakhir supaya memori fresh
+TimeoutStopSec=90
+
+[Install]
+WantedBy=multi-user.target

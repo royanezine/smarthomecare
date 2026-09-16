@@ -1,0 +1,17 @@
+[Unit]
+Description=SmartHomeCare Go WebSocket Service
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/smarthomecare-ws
+Environment=PORT=8088
+ExecStart=/opt/smarthomecare-ws/ws-service
+Restart=always
+RestartSec=10
+MemoryMax=256M
+
+[Install]
+WantedBy=multi-user.target
