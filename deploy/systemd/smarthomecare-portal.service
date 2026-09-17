@@ -6,7 +6,7 @@ After=network.target
 Type=simple
 User=www-data
 Group=www-data
-WorkingDirectory=/var/www/smarthomecare/portal
+WorkingDirectory=/var/www/html/smarthomecare/portal
 Environment=NODE_ENV=production
 Environment=PORT=3011
 ExecStart=/usr/bin/npm run start -- -p 3011

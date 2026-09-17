@@ -7,8 +7,8 @@ After=mysql.service
 Type=simple
 User=www-data
 Group=www-data
-WorkingDirectory=/var/www/smarthomecare/api
-ExecStart=/usr/bin/php /var/www/smarthomecare/api/artisan queue:work --sleep=3 --tries=3 --max-time=3600
+WorkingDirectory=/var/www/html/smarthomecare/api
+ExecStart=/usr/bin/php /var/www/html/smarthomecare/api/artisan queue:work --sleep=3 --tries=3 --max-time=3600
 Restart=always
 RestartSec=10
 # Pastikan proses lama berakhir supaya memori fresh
