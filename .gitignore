@@ -5,6 +5,7 @@
 # Env files (jangan commit secret)
 /.env
 /.env.*
+/deploy/env/.secrets.env
 
 # File sementara
 /stop
